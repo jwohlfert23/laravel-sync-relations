@@ -4,6 +4,7 @@ use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Validation\ValidationException;
 use Models\Author;
+use Models\Category;
 use Models\Comment;
 use Models\Post;
 use Orchestra\Testbench\TestCase;
@@ -80,6 +81,18 @@ class SyncableTraitTest extends TestCase
             'title' => 'Post #1'
         ]);
 
+        $category1 = Category::forceCreate([
+            'name' => 'Category #1'
+        ]);
+
+        $category2 = Category::forceCreate([
+            'name' => 'Category #2'
+        ]);
+
+        $category3 = Category::forceCreate([
+            'name' => 'Category #3'
+        ]);
+
         $author = Author::forceCreate([
             'name' => 'Jack'
         ]);
@@ -88,25 +101,31 @@ class SyncableTraitTest extends TestCase
             'comment' => 'My Comment'
         ]);
 
+
         $data = $post->toArray();
         $data['comments'] = [];
         $data['comments'][0] = $comment->toArray();
         $data['comments'][0]['author'] = ['id' => $author->id];
         $data['comments'][1] = ['comment' => 'New Comment'];
+        $data['categories'] = [$category1->toArray(), $category2->toArray()];
 
-        $post->saveAndSync($data, ['comments.author']);
-
-        $this->assertEquals(Post::count(), 1);
+        $post->saveAndSync($data, ['comments.author', 'author', 'categories']);
         $post = Post::first();
 
+        // Check Posts
+        $this->assertEquals(Post::count(), 1);
         $this->assertEquals($post->id, 1);
 
+        // Check Comments
         $comments = $post->comments()->get();
         $this->assertEquals($comments->count(), 2);
         $this->assertEquals($comments->offsetGet(0)->comment, 'My Comment');
         $this->assertEquals($comments->offsetGet(1)->comment, 'New Comment');
         $this->assertEquals($comments->offsetGet(0)->author->name, 'Jack');
 
+        // Check Categories
+        $categories = $post->categories()->get();
+        $this->assertEquals($categories->count(), 2);
     }
 
     public function testValidation()

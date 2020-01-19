@@ -2,7 +2,9 @@
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasOneOrMany;
+use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Request;
 use Illuminate\Support\Str;
@@ -50,35 +52,56 @@ trait SyncableTrait
         }
     }
 
+    /**
+     * @param Relation $relation
+     * @param $item
+     * @return Model|null
+     */
+    protected function relatedExists(Relation $relation, $item, $alreadyRelated = true)
+    {
+        $primaryKey = $relation->getRelated()->getKeyName();
+        if (!empty($item[$primaryKey])) {
+            if ($alreadyRelated === false) {
+                $relation = $relation->getRelated()->newModelQuery();
+            }
+            return $relation->find($item[$primaryKey]);
+        }
+        return null;
+    }
+
     protected function syncFromList(array $relationships, $data, $orderProp = null)
     {
-        $this->iterateOverList($relationships, $data, function ($relationshipModel, $new, $cb) use ($orderProp) {
+        $this->iterateOverList($relationships, $data, function (Relation $relationshipModel, $new, $cb) use ($orderProp) {
+            $relatedModel = $relationshipModel->getRelated();
+            $primaryKey = $relatedModel->getKeyName();
+
             if (is_a($relationshipModel, BelongsTo::class)) {
                 /** @var $relationshipModel BelongsTo */
-                $parent = $relationshipModel->getRelated()->find($new['id']);
-                $relationshipModel->associate($parent)->save();
+                if ($parent = $this->relatedExists($relationshipModel, $new, false)) {
+                    $relationshipModel->associate($parent)->save();
+                } else {
+                    $relationshipModel->dissociate()->save();
+                }
             } else if (is_a($relationshipModel, HasOneOrMany::class)) {
                 /** @var $relationshipModel HasOneOrMany */
 
                 // Handle hasOne relationships
-                if ($new && !empty($new['id'])) {
+                if ($new && !empty($new[$primaryKey])) {
                     $new = [$new];
                 }
 
-                $toRemove = $relationshipModel->pluck('id')->filter(function ($id) use ($new) {
-                    return !collect($new)->pluck('id')->contains($id);
+                $toRemove = $relationshipModel->pluck($primaryKey)->filter(function ($id) use ($new, $primaryKey) {
+                    return !collect($new)->pluck($primaryKey)->contains($id);
                 });
 
                 foreach ($new as $index => $item) {
-                    $relatedModel = $relationshipModel->getRelated();
                     $item = $relatedModel->beforeSync($item);
 
                     if ($orderProp) {
                         Arr::set($item, $orderProp, count($new) + 1 - $index);
                     }
 
-                    $primaryKey = $relatedModel->getKeyName();
-                    if (!empty($item[$primaryKey]) && ($related = $relationshipModel->find($item[$primaryKey]))) {
+                    if ($related = $this->relatedExists($relationshipModel, $item)) {
                         $related->update(Arr::except($item, [$primaryKey]));
                     } else {
                         $related = $relationshipModel->create($item);
@@ -91,6 +114,11 @@ trait SyncableTrait
 
                 // Don't use quick delete, otherwise it won't trigger observers
                 $relationshipModel->whereIn('id', $toRemove)->get()->each->delete();
+            } else if (is_a($relationshipModel, BelongsToMany::class)) {
+                /** @var $relationshipModel BelongsToMany */
+
+                $ids = collect($new)->pluck($primaryKey)->filter()->values()->toArray();
+                $relationshipModel->sync($ids);
             }
         });
     }
@@ -103,7 +131,8 @@ trait SyncableTrait
     {
         $this->iterateOverList($relationships, $data, function ($relationshipModel, $new, $cb) {
             if (is_a($relationshipModel, BelongsTo::class)) {
-                /** @var $relationshipModel BelongsTo */
+                // No need to validate since we are just syncing
+                // TODO: validate primary key is set
 
             } else if (is_a($relationshipModel, HasOneOrMany::class)) {
                 foreach ($new as $index => $item) {
@@ -120,6 +149,9 @@ trait SyncableTrait
 
                     $cb($relatedModel, $item);
                 }
+            } else if (is_a($relationshipModel, BelongsToMany::class)) {
+                // No need to validate since we are just syncing
+                // TODO: validate primary key is set
             }
         });
     }
