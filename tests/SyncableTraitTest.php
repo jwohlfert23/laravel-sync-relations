@@ -31,6 +31,7 @@ class SyncableTraitTest extends TestCase
         Schema::create('comments', function (Blueprint $table) {
             $table->increments('id');
             $table->unsignedInteger('author_id')->nullable();
+            $table->unsignedInteger('parent_id')->nullable();
             $table->unsignedInteger('post_id');
             $table->string('comment');
             $table->timestamps();
@@ -54,6 +55,44 @@ class SyncableTraitTest extends TestCase
         });
     }
 
+    public function testValidationRules()
+    {
+        $post = new Post();
+
+        $rules = $post->getCompleteRules($post->parseRelationships(['comments.childComments']));
+
+        $this->assertEquals($rules, [
+            "title" => "required",
+            "comments.*.comment" => "required",
+            "comments.*.child_comments.*.comment" => "required"
+        ]);
+    }
+
+    public function testInvalid()
+    {
+        $post = new Post();
+
+        $data = [
+            'title' => 'Post #1',
+            'comments' => [[
+                'comment' => null
+            ]]
+        ];
+
+        try {
+            $post->saveAndSync($data, ['comments']);
+            $this->fail("Expected exception not thrown");
+        } catch (ValidationException $e) {
+            $this->assertEquals($e->errors(), [
+                "comments.0.comment" => [
+                    0 => "The comments.0.comment field is required."
+                ]
+            ]);
+            $this->assertEquals(Post::count(), 0);
+            $this->assertEquals(Comment::count(), 0);
+        }
+    }
+
     public function testCreations()
     {
         $post = new Post();
@@ -65,7 +104,7 @@ class SyncableTraitTest extends TestCase
             ]]
         ];
 
-        $post->saveAndSync($data, ['comments']);
+        $post->saveAndSync($data);
 
         $this->assertEquals(Post::count(), 1);
         $post = Post::first();

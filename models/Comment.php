@@ -15,4 +15,9 @@ class Comment extends BaseModel
     {
         return $this->belongsTo(Author::class);
     }
+
+    public function childComments()
+    {
+        return $this->hasMany(Comment::class, 'parent_id');
+    }
 }

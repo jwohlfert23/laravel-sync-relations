@@ -3,6 +3,7 @@
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOneOrMany;
 use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Support\Arr;
@@ -13,6 +14,13 @@ use Illuminate\Validation\ValidationException;
 
 trait SyncableTrait
 {
+    protected $syncable = [];
+
+    public function getSyncable()
+    {
+        return $this->syncable;
+    }
+
     protected function getSyncValidationRules()
     {
         return [];
@@ -130,40 +138,42 @@ trait SyncableTrait
         });
     }
 
+    public function getCompleteRules($relationships)
+    {
+        $rules = $this->getSyncValidationRules();
+        if (!is_iterable($relationships)) {
+            return $rules;
+        }
+        foreach ($relationships as $relationship => $children) {
+            $relationshipModel = $this->{$relationship}();
+            $snake = Str::snake($relationship);
+
+            // Only validate HasOne or HasMany for now
+            if (!is_a($relationshipModel, HasOneOrMany::class)) {
+                continue;
+            }
+            $key = is_a($relationshipModel, HasMany::class) ? $snake . '.*' : $snake;
+            $rules[$key] = $relationshipModel->getRelated()->getCompleteRules($children);
+        }
+
+        return Arr::dot($rules);
+    }
+
     /**
      * @param $relationships
      * @param $data
+     *
+     * @throws ValidationException
      */
     protected function validateFromList($relationships, $data)
     {
-        $this->iterateOverList($relationships, $data, function ($relationshipModel, $new, $cb) {
-            if (is_a($relationshipModel, BelongsTo::class)) {
-                // No need to validate since we are just syncing
-                // TODO: validate primary key is set
+        $rules = $this->getCompleteRules($relationships);
 
-            } else if (is_a($relationshipModel, HasOneOrMany::class)) {
-                foreach ($new as $index => $item) {
-
-                    $relatedModel = $relationshipModel->getRelated();
-
-                    /** @var SyncableTrait $relatedModel */
-                    $rules = $relatedModel->getSyncValidationRules();
-                    $messages = $relatedModel->getSyncValidationMessages();
-
-                    $validator = Validator::make($item, $rules, $messages);
-                    $validator->validate();
-
-
-                    $cb($relatedModel, $item);
-                }
-            } else if (is_a($relationshipModel, BelongsToMany::class)) {
-                // No need to validate since we are just syncing
-                // TODO: validate primary key is set
-            }
-        });
+        $validator = Validator::make($data, $rules, $this->getSyncValidationMessages());
+        $validator->validate();
     }
 
-    protected function parseRelationships($dot)
+    public function parseRelationships($dot)
     {
         $arr = [];
         $relations = is_string($dot) ? func_get_args() : $dot;
@@ -194,11 +204,14 @@ trait SyncableTrait
      *
      * @throws ValidationException
      */
-    public function saveAndSync($data, array $toSync)
+    public function saveAndSync($data, array $toSync = null)
     {
-        $this->validateForSync($toSync, $data);
+        // If nothing provided here, use syncable property on model
+        if (is_null($toSync)) {
+            $toSync = $this->getSyncable();
+        }
 
-        Validator::make($data, $this->getSyncValidationRules(), $this->getSyncValidationMessages())->validate();
+        $this->validateForSync($toSync, $data);
 
         $this->fill($data);
         $this->save();

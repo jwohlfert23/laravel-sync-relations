@@ -3,6 +3,14 @@
 class Post extends BaseModel
 {
     protected $fillable = ['title'];
+    protected $syncable = ['comments'];
+
+    protected function getSyncValidationRules()
+    {
+        return [
+            'title' => 'required'
+        ];
+    }
 
     public function author()
     {
