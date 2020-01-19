@@ -1,34 +1,55 @@
-### Laravel SEO
+### Laravel Sync Relations
 
 
-##### Installation
+Add this to your models:
 
-Install package
+```php
+use Jwohlfert23/LaravelSyncRelations/SyncableTrait;
+...
 
-`composer require jwohlfert23/laravel-seo`
-
-You can publish the config to change default setting like the base of your title, twitter handle, etc.
-
-`php artisan vendor:publish --provider="Jwohlfert23\LaravelSeo\ServiceProvider"`
-
-Add `Jwohlfert23\LaravelSeo\SeoTrait` to your base controller.  This will allow you to easily change the page title and other meta information directly from your controller like so...
-```
-public function index() 
-{
-    $this->seo()->setTitle('Home')->setDescription('This is out home page');
-     
-    return view('home');
+class Post extends Model {
+    use SyncableTrait;
 }
 ```
 
-Insert `app('seo')->render()` into the head of your layout like so...
 
-```
-<head>
-....
-{!! app('seo')->render() !!}
-...
-</head>
+And you can use it in your controllers like so:
+
+```php
+
+public function update($id) {
+    $post = Post::find($id);
+    
+    $post->saveAndSync(request()->input(), ['tags']);
+}
 ```
 
-# laravel-sync-relations
+Let's assume the following
+- Post model has a "hasMany" relationship with tags.
+- The request data looks like:
+
+```json
+{
+  "title": "My Post Title",
+  "tags": [{
+    "id": 1,
+    "name": "My First Tag"
+  }, {
+     "name": "My Second Tag"
+  }]
+}
+```
+
+By running `saveAndSync`, it will iterate over the 2 tags provided in the request. Because the first one already exists, it will update that one and set the name to "My First Tag". The second one doesn't exist aleady so it will create it using the name "My Second Tag".  After this controller processeed this request, you could run the following:
+
+```php
+Post::find($id)->tags->pluck('name')
+```
+and get this:
+```php
+["My First Tag", "My Second Tag"]
+```
+
+This package also works with "belongsToMany" and "belongsTo" relationship types.  However, for those, it will not update/create the nested objects.  It will only associate the existing models with the parent model (in other words, for these relationship, you must provide the primary key for each child).
+
+Additionally, you could run `saveAndSync(request()->input(), ['comments.author'])` to do a nested sync.
