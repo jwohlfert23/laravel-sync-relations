@@ -23,6 +23,11 @@ trait SyncableTrait
         return [];
     }
 
+    protected function getOrderAttributeName()
+    {
+        return null;
+    }
+
     public function beforeSync(array $data)
     {
         return $data;
@@ -57,21 +62,18 @@ trait SyncableTrait
      * @param $item
      * @return Model|null
      */
-    protected function relatedExists(Relation $relation, $item, $alreadyRelated = true)
+    protected function relatedExists(Relation $relation, $item)
     {
         $primaryKey = $relation->getRelated()->getKeyName();
         if (!empty($item[$primaryKey])) {
-            if ($alreadyRelated === false) {
-                $relation = $relation->getRelated()->newModelQuery();
-            }
-            return $relation->find($item[$primaryKey]);
+            return $relation->getRelated()->newModelQuery()->find($item[$primaryKey]);
         }
         return null;
     }
 
-    protected function syncFromList(array $relationships, $data, $orderProp = null)
+    protected function syncFromList(array $relationships, $data)
     {
-        $this->iterateOverList($relationships, $data, function (Relation $relationshipModel, $new, $cb) use ($orderProp) {
+        $this->iterateOverList($relationships, $data, function (Relation $relationshipModel, $new, $cb) {
             $relatedModel = $relationshipModel->getRelated();
             $primaryKey = $relatedModel->getKeyName();
 
@@ -98,7 +100,7 @@ trait SyncableTrait
                 foreach ($new as $index => $item) {
                     $item = $relatedModel->beforeSync($item);
 
-                    if ($orderProp) {
+                    if ($relatedModel->getOrderAttributeName()) {
                         Arr::set($item, $orderProp, count($new) + 1 - $index);
                     }
 
@@ -171,10 +173,10 @@ trait SyncableTrait
         return $arr;
     }
 
-    public function syncRelationships($dotRelationship, $data, $orderProp = null)
+    public function syncRelationships($dotRelationship, $data)
     {
         $array = $this->parseRelationships($dotRelationship);
-        $this->syncFromList($array, $data, $orderProp);
+        $this->syncFromList($array, $data);
         return $this;
     }
 
