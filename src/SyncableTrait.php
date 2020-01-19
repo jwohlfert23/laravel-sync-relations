@@ -89,9 +89,10 @@ trait SyncableTrait
                 if ($new && !empty($new[$primaryKey])) {
                     $new = [$new];
                 }
+                $new = collect($new);
 
                 $toRemove = $relationshipModel->pluck($primaryKey)->filter(function ($id) use ($new, $primaryKey) {
-                    return !collect($new)->pluck($primaryKey)->contains($id);
+                    return !$new->pluck($primaryKey)->contains($id);
                 });
 
                 foreach ($new as $index => $item) {
@@ -113,7 +114,11 @@ trait SyncableTrait
                 }
 
                 // Don't use quick delete, otherwise it won't trigger observers
-                $relationshipModel->whereIn('id', $toRemove)->get()->each->delete();
+                $toRemove->each(function ($id) use ($relationshipModel) {
+                    if ($model = $relationshipModel->getRelated()->newModelQuery()->find($id)) {
+                        $model->delete();
+                    }
+                });
             } else if (is_a($relationshipModel, BelongsToMany::class)) {
                 /** @var $relationshipModel BelongsToMany */
 

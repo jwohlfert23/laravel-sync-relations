@@ -93,6 +93,7 @@ class SyncableTraitTest extends TestCase
             'name' => 'Category #3'
         ]);
 
+
         $author = Author::forceCreate([
             'name' => 'Jack'
         ]);
@@ -100,6 +101,12 @@ class SyncableTraitTest extends TestCase
         $comment = $post->comments()->create([
             'comment' => 'My Comment'
         ]);
+
+        $post->comments()->create([
+            'comment' => 'Should Be Deleted'
+        ]);
+
+        $post->categories()->sync([$category3->id]);
 
 
         $data = $post->toArray();
@@ -110,6 +117,7 @@ class SyncableTraitTest extends TestCase
         $data['categories'] = [$category1->toArray(), $category2->toArray()];
 
         $post->saveAndSync($data, ['comments.author', 'author', 'categories']);
+
         $post = Post::first();
 
         // Check Posts
