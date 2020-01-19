@@ -100,7 +100,7 @@ trait SyncableTrait
                 foreach ($new as $index => $item) {
                     $item = $relatedModel->beforeSync($item);
 
-                    if ($relatedModel->getOrderAttributeName()) {
+                    if ($orderProp = $relatedModel->getOrderAttributeName()) {
                         Arr::set($item, $orderProp, count($new) + 1 - $index);
                     }
 
