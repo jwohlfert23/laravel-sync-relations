@@ -1,0 +1,39 @@
+{
+  "name": "jwohlfert23/laravel-sync-relations",
+  "description": "Package to sync nested relations from request data",
+  "keywords": [
+    "laravel",
+    "seo"
+  ],
+  "license": "MIT",
+  "authors": [
+    {
+      "name": "Jack Wohlfert",
+      "email": "jack.wohlfert@gmail.com"
+    }
+  ],
+  "repositories": [
+    {
+      "type": "git",
+      "url": "https://github.com/jwohlfert23/laravel-sync-relations.git"
+    }
+  ],
+  "autoload": {
+    "psr-4": {
+      "Jwohlfert23\\LaravelSyncRelations\\": "src/"
+    }
+  },
+  "require": {
+    "php": ">=5.5.9",
+    "nesbot/carbon": "~2",
+    "illuminate/database": ">=5.0",
+    "illuminate/support": ">=5.0"
+  },
+  "require-dev": {
+  },
+  "config": {
+    "preferred-install": "dist"
+  },
+  "minimum-stability": "dev",
+  "prefer-stable": true
+}
