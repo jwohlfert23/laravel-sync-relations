@@ -79,7 +79,7 @@ trait SyncableTrait
         return null;
     }
 
-    protected function syncFromList(array $relationships, $data)
+    public function syncFromList(array $relationships, $data)
     {
         $this->iterateOverList($relationships, $data, function (Relation $relationshipModel, $new, $cb) {
             $relatedModel = $relationshipModel->getRelated();
