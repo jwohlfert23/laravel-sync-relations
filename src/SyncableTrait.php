@@ -46,7 +46,21 @@ trait SyncableTrait
         return $this;
     }
 
-    protected function iterateOverList($relationships, $data, callable $callback)
+    /**
+     * @param Relation $relation
+     * @param $item
+     * @return Model|null|SyncableTrait
+     */
+    protected function relatedExists(Relation $relation, $item)
+    {
+        $primaryKey = $relation->getRelated()->getKeyName();
+        if (!empty($item[$primaryKey])) {
+            return $relation->getRelated()->newModelQuery()->find($item[$primaryKey]);
+        }
+        return null;
+    }
+
+    public function syncRelationshipsFromTree(array $relationships, $data)
     {
         if (!is_iterable($relationships))
             return;
@@ -58,84 +72,59 @@ trait SyncableTrait
             if (Arr::has($data, $snake)) {
                 $new = Arr::get($data, $snake);
 
-                $callback($relationshipModel, $new, function ($related, $item) use ($children, $callback) {
-                    $related->iterateOverList($children, $item, $callback);
-                });
+                $relatedModel = $relationshipModel->getRelated();
+                $primaryKey = $relatedModel->getKeyName();
+
+                if (is_a($relationshipModel, HasOneOrMany::class)) {
+                    /** @var $relationshipModel HasOneOrMany */
+
+                    // Handle hasOne relationships
+                    if ($new && !empty($new[$primaryKey])) {
+                        $new = [$new];
+                    }
+                    $new = collect($new);
+
+                    $toRemove = $relationshipModel->pluck($primaryKey)->filter(function ($id) use ($new, $primaryKey) {
+                        return !$new->pluck($primaryKey)->contains($id);
+                    });
+
+                    foreach ($new as $index => $item) {
+                        $item = $relatedModel->beforeSync($item);
+
+                        if ($orderProp = $relatedModel->getOrderAttributeName()) {
+                            Arr::set($item, $orderProp, count($new) + 1 - $index);
+                        }
+
+                        $related = $this->relatedExists($relationshipModel, $item);
+                        if (!$related) {
+                            $related = $relationshipModel->make();
+                        }
+
+                        $related->fill(Arr::except($item, [$primaryKey]))
+                            ->syncBelongsTo($item, is_array($children) ? array_keys($children) : [])
+                            ->save();
+
+                        $related->afterSync($item);
+
+                        if (is_array($children)) {
+                            $related->syncRelationshipsFromTree($children, $item);
+                        }
+                    }
+
+                    // Don't use quick delete, otherwise it won't trigger observers
+                    $toRemove->each(function ($id) use ($relationshipModel) {
+                        if ($model = $relationshipModel->getRelated()->newModelQuery()->find($id)) {
+                            $model->delete();
+                        }
+                    });
+                } else if (is_a($relationshipModel, BelongsToMany::class)) {
+                    /** @var $relationshipModel BelongsToMany */
+
+                    $ids = collect($new)->pluck($primaryKey)->filter()->values()->toArray();
+                    $relationshipModel->sync($ids);
+                }
             }
         }
-    }
-
-    /**
-     * @param Relation $relation
-     * @param $item
-     * @return Model|null
-     */
-    protected function relatedExists(Relation $relation, $item)
-    {
-        $primaryKey = $relation->getRelated()->getKeyName();
-        if (!empty($item[$primaryKey])) {
-            return $relation->getRelated()->newModelQuery()->find($item[$primaryKey]);
-        }
-        return null;
-    }
-
-    public function syncFromList(array $relationships, $data)
-    {
-        $this->iterateOverList($relationships, $data, function (Relation $relationshipModel, $new, $cb) {
-            $relatedModel = $relationshipModel->getRelated();
-            $primaryKey = $relatedModel->getKeyName();
-
-            if (is_a($relationshipModel, BelongsTo::class)) {
-                /** @var $relationshipModel BelongsTo */
-                if ($parent = $this->relatedExists($relationshipModel, $new, false)) {
-                    $relationshipModel->associate($parent)->save();
-                } else {
-                    $relationshipModel->dissociate()->save();
-                }
-            } else if (is_a($relationshipModel, HasOneOrMany::class)) {
-                /** @var $relationshipModel HasOneOrMany */
-
-                // Handle hasOne relationships
-                if ($new && !empty($new[$primaryKey])) {
-                    $new = [$new];
-                }
-                $new = collect($new);
-
-                $toRemove = $relationshipModel->pluck($primaryKey)->filter(function ($id) use ($new, $primaryKey) {
-                    return !$new->pluck($primaryKey)->contains($id);
-                });
-
-                foreach ($new as $index => $item) {
-                    $item = $relatedModel->beforeSync($item);
-
-                    if ($orderProp = $relatedModel->getOrderAttributeName()) {
-                        Arr::set($item, $orderProp, count($new) + 1 - $index);
-                    }
-
-                    if ($related = $this->relatedExists($relationshipModel, $item)) {
-                        $related->update(Arr::except($item, [$primaryKey]));
-                    } else {
-                        $related = $relationshipModel->create($item);
-                    }
-
-                    $related->afterSync($item);
-
-                    $cb($related, $item);
-                }
-
-                // Don't use quick delete, otherwise it won't trigger observers
-                $toRemove->each(function ($id) use ($relationshipModel) {
-                    if ($model = $relationshipModel->getRelated()->newModelQuery()->find($id)) {
-                        $model->delete();
-                    }
-                });
-            } else if (is_a($relationshipModel, BelongsToMany::class)) {
-                /** @var $relationshipModel BelongsToMany */
-
-                $ids = collect($new)->pluck($primaryKey)->filter()->values()->toArray();
-                $relationshipModel->sync($ids);
-            }
-        });
     }
 
     public function getCompleteRules($relationships)
@@ -165,7 +154,7 @@ trait SyncableTrait
      *
      * @throws ValidationException
      */
-    protected function validateFromList($relationships, $data)
+    protected function validateFromTree($relationships, $data)
     {
         $rules = $this->getCompleteRules($relationships);
 
@@ -185,15 +174,47 @@ trait SyncableTrait
 
     public function syncRelationships($dotRelationship, $data)
     {
-        $array = $this->parseRelationships($dotRelationship);
-        $this->syncFromList($array, $data);
+        $tree = $this->parseRelationships($dotRelationship);
+        $this->syncRelationshipsFromTree($tree, $data);
         return $this;
+    }
+
+    public function syncBelongsToFromDot($dotRelationship, $data)
+    {
+        $tree = $this->parseRelationships($dotRelationship);
+        return $this->syncBelongsTo($data, array_keys($tree));
     }
 
     public function validateForSync($dotRelationship, $data)
     {
-        $array = $this->parseRelationships($dotRelationship);
-        $this->validateFromList($array, $data);
+        $tree = $this->parseRelationships($dotRelationship);
+        $this->validateFromTree($tree, $data);
+        return $this;
+    }
+
+    /**
+     * Will associate all belongsTo relationships that have been passed
+     * Will not save
+     * Not recursive
+     *
+     * @param $data
+     * @param null $toSync
+     */
+    public function syncBelongsTo($data, $relationships = [])
+    {
+        foreach ($relationships as $relationship) {
+            $snake = Str::snake($relationship);
+            $relationshipModel = $this->{$relationship}();
+
+            if (is_a($relationshipModel, BelongsTo::class) && Arr::has($data, $snake)) {
+                /** @var $relationshipModel BelongsTo */
+                if ($parent = $this->relatedExists($relationshipModel, $data[$snake])) {
+                    $relationshipModel->associate($parent);
+                } else {
+                    $relationshipModel->dissociate();
+                }
+            }
+        }
         return $this;
     }
 
@@ -213,8 +234,9 @@ trait SyncableTrait
 
         $this->validateForSync($toSync, $data);
 
-        $this->fill($data);
-        $this->save();
+        $this->fill($data)
+            ->syncBelongsToFromDot($toSync, $data)
+            ->save();
 
         $this->syncRelationships($toSync, $data);
 

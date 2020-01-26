@@ -149,6 +149,7 @@ class SyncableTraitTest extends TestCase
 
 
         $data = $post->toArray();
+        $data['author'] = $author->toArray();
         $data['comments'] = [];
         $data['comments'][0] = $comment->toArray();
         $data['comments'][0]['author'] = ['id' => $author->id];
@@ -162,6 +163,9 @@ class SyncableTraitTest extends TestCase
         // Check Posts
         $this->assertEquals(Post::count(), 1);
         $this->assertEquals($post->id, 1);
+
+        // Check Author
+        $this->assertEquals($post->author->id, 1);
 
         // Check Comments
         $comments = $post->comments()->get();
