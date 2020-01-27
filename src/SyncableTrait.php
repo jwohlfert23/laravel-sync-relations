@@ -4,6 +4,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\Relations\HasOneOrMany;
 use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Support\Arr;
@@ -79,7 +80,7 @@ trait SyncableTrait
                     /** @var $relationshipModel HasOneOrMany */
 
                     // Handle hasOne relationships
-                    if ($new && !empty($new[$primaryKey])) {
+                    if (is_a($relationshipModel, HasOne::class)) {
                         $new = [$new];
                     }
                     $new = collect($new);
