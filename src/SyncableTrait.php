@@ -129,7 +129,7 @@ trait SyncableTrait
         }
     }
 
-    public function getCompleteRules($relationships)
+    public function getCompleteRules($relationships, $data)
     {
         $rules = $this->getSyncValidationRules();
         if (!is_iterable($relationships)) {
@@ -143,8 +143,12 @@ trait SyncableTrait
             if (!is_a($relationshipModel, HasOneOrMany::class)) {
                 continue;
             }
-            $key = is_a($relationshipModel, HasMany::class) ? $snake . '.*' : $snake;
-            $rules[$key] = $relationshipModel->getRelated()->getCompleteRules($children);
+
+            if (Arr::has($data, $snake)) {
+                $item = $data[$snake];
+                $key = is_a($relationshipModel, HasMany::class) ? $snake . '.*' : $snake;
+                $rules[$key] = $relationshipModel->getRelated()->getCompleteRules($children, is_array($item) ? Arr::first($item) : $item);
+            }
         }
 
         return Arr::dot($rules);
@@ -201,7 +205,7 @@ trait SyncableTrait
     protected function validateFromTree($relationships, $data)
     {
         $data = $this->getCompleteData($relationships, $data);
-        $rules = $this->getCompleteRules($relationships);
+        $rules = $this->getCompleteRules($relationships, $data);
 
         $validator = Validator::make($data, $rules, $this->getSyncValidationMessages());
         $validator->validate();

@@ -61,12 +61,26 @@ class SyncableTraitTest extends TestCase
     {
         $post = new Post();
 
-        $rules = $post->getCompleteRules($post->parseRelationships(['comments.childComments']));
+        $rules = $post->getCompleteRules($post->parseRelationships(['comments.childComments']), [
+            'comments' => [[
+                'child_comments' => []
+            ]]
+        ]);
 
         $this->assertEquals($rules, [
             "title" => "required",
             "comments.*.comment" => "required",
             "comments.*.child_comments.*.comment" => "required"
+        ]);
+
+        // Now try without data being passed
+        $rules = $post->getCompleteRules($post->parseRelationships(['comments.childComments']), [
+            'comments' => []
+        ]);
+
+        $this->assertEquals($rules, [
+            "title" => "required",
+            "comments.*.comment" => "required",
         ]);
     }
 
