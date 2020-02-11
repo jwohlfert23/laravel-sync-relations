@@ -25,6 +25,7 @@ class SyncableTraitTest extends TestCase
             $table->increments('id');
             $table->unsignedInteger('author_id')->nullable();
             $table->string('title');
+            $table->string('notes')->nullable();
             $table->timestamps();
         });
 
@@ -34,6 +35,7 @@ class SyncableTraitTest extends TestCase
             $table->unsignedInteger('parent_id')->nullable();
             $table->unsignedInteger('post_id');
             $table->string('comment');
+            $table->string('notes')->nullable();
             $table->timestamps();
         });
 
@@ -179,7 +181,7 @@ class SyncableTraitTest extends TestCase
         $this->assertEquals($categories->count(), 2);
     }
 
-    public function testValidation()
+    public function testValidationFails()
     {
         $post = new Post();
 
@@ -197,5 +199,30 @@ class SyncableTraitTest extends TestCase
             $this->assertEquals(Post::count(), 0);
             $this->assertEquals(Comment::count(), 0);
         }
+    }
+
+    public function testPartialValidationPasses()
+    {
+        $post = Post::create([
+            'title' => 'Hello'
+        ]);
+
+        $comment = $post->comments()->create([
+            'comment' => 'Hello!'
+        ]);
+
+        $data = [
+            'notes' => 'This is a great post!',
+            'comments' => [[
+                'id' => $comment->id,
+                'notes' => 'this is a note'
+            ]]
+        ];
+
+        $post->saveAndSync($data);
+
+        $this->assertEquals($post->notes, 'This is a great post!');
+        $this->assertEquals($post->comments[0]->notes, 'this is a note');
+
     }
 }

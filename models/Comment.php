@@ -2,7 +2,7 @@
 
 class Comment extends BaseModel
 {
-    protected $fillable = ['comment'];
+    protected $fillable = ['comment', 'notes'];
 
     protected function getSyncValidationRules()
     {

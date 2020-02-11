@@ -12,6 +12,7 @@ use Illuminate\Support\Facades\Request;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\ValidationException;
+use Models\Comment;
 
 trait SyncableTrait
 {
@@ -149,6 +150,48 @@ trait SyncableTrait
         return Arr::dot($rules);
     }
 
+    public function getCompleteData($relationships, $data)
+    {
+        $data = array_merge($this->toArray(), $data);
+        if (!is_iterable($relationships)) {
+            return $data;
+        }
+        foreach ($relationships as $relationship => $children) {
+            $relationshipModel = $this->{$relationship}();
+            $related = $relationshipModel->getRelated();
+            $primaryKey = $related->getKeyName();
+            $snake = Str::snake($relationship);
+
+            // Only validate HasOne or HasMany for now
+            if (!is_a($relationshipModel, HasOneOrMany::class)) {
+                continue;
+            }
+            if (Arr::has($data, $snake)) {
+                // Handle hasOne relationships
+                if (is_a($relationshipModel, HasOne::class)) {
+                    $item = $data[$snake];
+                    if (isset($item[$primaryKey])) {
+                        $data[$snake] = $relationshipModel
+                            ->findOrFail($item[$primaryKey])
+                            ->getCompleteData($children, $item);
+                    }
+                } else {
+                    $data[$snake] = array_map(function ($item) use ($relationshipModel, $primaryKey, $children) {
+                        if (!isset($item[$primaryKey])) {
+                            return $item;
+                        }
+                        return $relationshipModel
+                            ->findOrFail($item[$primaryKey])
+                            ->getCompleteData($children, $item);
+                    }, $data[$snake]);
+                }
+            }
+
+
+        }
+        return $data;
+    }
+
     /**
      * @param $relationships
      * @param $data
@@ -157,6 +200,7 @@ trait SyncableTrait
      */
     protected function validateFromTree($relationships, $data)
     {
+        $data = $this->getCompleteData($relationships, $data);
         $rules = $this->getCompleteRules($relationships);
 
         $validator = Validator::make($data, $rules, $this->getSyncValidationMessages());

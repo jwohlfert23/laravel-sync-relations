@@ -2,7 +2,7 @@
 
 class Post extends BaseModel
 {
-    protected $fillable = ['title'];
+    protected $fillable = ['title', 'notes'];
     protected $syncable = ['comments'];
 
     protected function getSyncValidationRules()
