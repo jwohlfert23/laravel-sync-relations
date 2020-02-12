@@ -175,7 +175,7 @@ trait SyncableTrait
                 if (is_a($relationshipModel, HasOne::class)) {
                     $item = $data[$snake];
                     if (isset($item[$primaryKey])) {
-                        $data[$snake] = $relationshipModel
+                        $data[$snake] = with(clone $relationshipModel)
                             ->findOrFail($item[$primaryKey])
                             ->getCompleteData($children, $item);
                     }
@@ -184,7 +184,7 @@ trait SyncableTrait
                         if (!isset($item[$primaryKey])) {
                             return $item;
                         }
-                        return $relationshipModel
+                        return with(clone $relationshipModel)
                             ->findOrFail($item[$primaryKey])
                             ->getCompleteData($children, $item);
                     }, $data[$snake]);
