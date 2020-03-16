@@ -6,6 +6,8 @@ use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\Relations\HasOneOrMany;
+use Illuminate\Database\Eloquent\Relations\MorphMany;
+use Illuminate\Database\Eloquent\Relations\MorphOne;
 use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Request;
@@ -48,6 +50,21 @@ trait SyncableTrait
         return $this;
     }
 
+    protected function isRelationOneToMany(Relation $relation)
+    {
+        return is_a($relation, HasOneOrMany::class);
+    }
+
+    protected function isRelationSingle(Relation $relation)
+    {
+        return is_a($relation, HasOne::class) || is_a($relation, MorphOne::class);
+    }
+
+    protected function isRelationMany(Relation $relation)
+    {
+        return is_a($relation, HasMany::class) || is_a($relation, MorphMany::class);
+    }
+
     /**
      * @param Relation $relation
      * @param $item
@@ -77,11 +94,11 @@ trait SyncableTrait
                 $relatedModel = $relationshipModel->getRelated();
                 $primaryKey = $relatedModel->getKeyName();
 
-                if (is_a($relationshipModel, HasOneOrMany::class)) {
+                if ($this->isRelationOneToMany($relationshipModel)) {
                     /** @var $relationshipModel HasOneOrMany */
 
                     // Handle hasOne relationships
-                    if (is_a($relationshipModel, HasOne::class)) {
+                    if ($this->isRelationSingle($relationshipModel)) {
                         $new = [$new];
                     }
                     $new = collect($new);
@@ -140,13 +157,13 @@ trait SyncableTrait
             $snake = Str::snake($relationship);
 
             // Only validate HasOne or HasMany for now
-            if (!is_a($relationshipModel, HasOneOrMany::class)) {
+            if (!$this->isRelationOneToMany($relationshipModel)) {
                 continue;
             }
 
             if (Arr::has($data, $snake)) {
                 $item = $data[$snake];
-                $key = is_a($relationshipModel, HasMany::class) ? $snake . '.*' : $snake;
+                $key = $this->isRelationMany($relationshipModel) ? ($snake . '.*') : $snake;
                 $rules[$key] = $relationshipModel->getRelated()->getCompleteRules($children, is_array($item) ? Arr::first($item) : $item);
             }
         }
