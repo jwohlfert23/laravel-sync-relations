@@ -300,13 +300,15 @@ trait SyncableTrait
 
         $this->validateForSync($toSync, $data);
 
+        $data = $this->beforeSync($data);
+
         $this->fill($data)
             ->syncBelongsToFromDot($toSync, $data)
             ->save();
 
         $this->syncRelationships($toSync, $data);
 
-        return $this;
+        return $this->afterSync($data);
     }
 
 }
