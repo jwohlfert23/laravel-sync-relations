@@ -142,6 +142,10 @@ trait SyncableTrait
                     $ids = collect($new)->pluck($primaryKey)->filter()->values()->toArray();
                     $relationshipModel->sync($ids);
                 }
+
+                if ($this->relationLoaded($relationship)) {
+                    $this->unsetRelation($relationship);
+                }
             }
         }
     }
