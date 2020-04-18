@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\Relations\HasOneOrMany;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Illuminate\Database\Eloquent\Relations\MorphOne;
+use Illuminate\Database\Eloquent\Relations\MorphTo;
 use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Request;
@@ -70,11 +71,17 @@ trait SyncableTrait
      * @param $item
      * @return Model|null|SyncableTrait
      */
-    protected function relatedExists(Relation $relation, $item)
+    public function relatedExists(Relation $relation, $item)
     {
-        $primaryKey = $relation->getRelated()->getKeyName();
+        $model = $relation->getRelated();
+        if (is_a($relation, MorphTo::class)) {
+            throw_if(empty($item['syncable_type']), new \InvalidArgumentException("Unable to determine morphed model class to sync"));
+            $class = Relation::getMorphedModel($item['syncable_type']) ?: $item['syncable_type'];
+            $model = new $class();
+        }
+        $primaryKey = $model->getKeyName();
         if (!empty($item[$primaryKey])) {
-            return $relation->getRelated()->newModelQuery()->find($item[$primaryKey]);
+            return $model->find($item[$primaryKey]);
         }
         return null;
     }
@@ -315,4 +322,14 @@ trait SyncableTrait
         return $this->afterSync($data);
     }
 
+    public function getSyncableTypeAttribute()
+    {
+        $alias = array_search(static::class, Relation::$morphMap);
+        return $alias === false ? static::class : $alias;
+    }
+
+    protected function initializeSyncableTrait()
+    {
+        $this->appends[] = 'syncable_type';
+    }
 }
