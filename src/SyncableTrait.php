@@ -232,8 +232,8 @@ trait SyncableTrait
      */
     protected function validateFromTree($relationships, $data)
     {
-        $data = $this->getCompleteData($relationships, $data);
         $rules = $this->getCompleteRules($relationships, $data);
+        $data = $this->getCompleteData($relationships, $data);
 
         $validator = Validator::make($data, $rules, $this->getSyncValidationMessages());
         $validator->validate();
