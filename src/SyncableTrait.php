@@ -200,7 +200,7 @@ trait SyncableTrait
             }
             if (Arr::has($data, $snake)) {
                 // Handle hasOne relationships
-                if (is_a($relationshipModel, HasOne::class)) {
+                if ($this->isRelationSingle($relationshipModel)) {
                     $item = $data[$snake];
                     if (isset($item[$primaryKey])) {
                         $data[$snake] = with(clone $relationshipModel)
