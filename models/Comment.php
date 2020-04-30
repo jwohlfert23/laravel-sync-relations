@@ -1,13 +1,17 @@
 <?php namespace Models;
 
+use Illuminate\Validation\Rule;
+
 class Comment extends BaseModel
 {
-    protected $fillable = ['comment', 'notes'];
+    protected $fillable = ['comment', 'type'];
 
     protected function getSyncValidationRules()
     {
         return [
-            'comment' => 'required'
+            'comment' => 'required',
+            'author' => 'required_exists',
+            'type' => [Rule::in('public', 'private')]
         ];
     }
 

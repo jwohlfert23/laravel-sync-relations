@@ -2,5 +2,5 @@
 
 class Author extends BaseModel
 {
-
+    protected $fillable = ['name'];
 }

@@ -3,6 +3,8 @@
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Validation\ValidationException;
+use Jwohlfert23\LaravelSyncRelations\SyncableHelpers;
+use Jwohlfert23\LaravelSyncRelations\SyncRelationsServiceProvider;
 use Models\Author;
 use Models\Category;
 use Models\Comment;
@@ -14,6 +16,7 @@ class SyncableTraitTest extends TestCase
     public function setUp(): void
     {
         parent::setUp();
+        app()->register(SyncRelationsServiceProvider::class);
 
         Schema::dropIfExists('posts');
         Schema::dropIfExists('authors');
@@ -35,7 +38,7 @@ class SyncableTraitTest extends TestCase
             $table->unsignedInteger('parent_id')->nullable();
             $table->unsignedInteger('post_id');
             $table->string('comment');
-            $table->string('notes')->nullable();
+            $table->string('type')->nullable();
             $table->timestamps();
         });
 
@@ -55,34 +58,10 @@ class SyncableTraitTest extends TestCase
             $table->unsignedInteger('post_id');
             $table->unsignedInteger('category_id');
         });
+
+        Author::create(['name' => 'Jack']);
     }
 
-    public function testValidationRules()
-    {
-        $post = new Post();
-
-        $rules = $post->getCompleteRules($post->parseRelationships(['comments.childComments']), [
-            'comments' => [[
-                'child_comments' => []
-            ]]
-        ]);
-
-        $this->assertEquals($rules, [
-            "title" => "required",
-            "comments.*.comment" => "required",
-            "comments.*.child_comments.*.comment" => "required"
-        ]);
-
-        // Now try without data being passed
-        $rules = $post->getCompleteRules($post->parseRelationships(['comments.childComments']), [
-            'comments' => []
-        ]);
-
-        $this->assertEquals($rules, [
-            "title" => "required",
-            "comments.*.comment" => "required",
-        ]);
-    }
 
     public function testInvalid()
     {
@@ -99,10 +78,8 @@ class SyncableTraitTest extends TestCase
             $post->saveAndSync($data, ['comments']);
             $this->fail("Expected exception not thrown");
         } catch (ValidationException $e) {
-            $this->assertEquals($e->errors(), [
-                "comments.0.comment" => [
-                    0 => "The comments.0.comment field is required."
-                ]
+            $this->assertEquals($e->errors()["comments.0.comment"], [
+                0 => "The comments.0.comment field is required."
             ]);
             $this->assertEquals(Post::count(), 0);
             $this->assertEquals(Comment::count(), 0);
@@ -115,7 +92,9 @@ class SyncableTraitTest extends TestCase
 
         $data = [
             'title' => 'Post #1',
+            'author' => ['id' => 1],
             'comments' => [[
+                'author' => ['id' => 1],
                 'comment' => 'My Comment'
             ]]
         ];
@@ -133,7 +112,7 @@ class SyncableTraitTest extends TestCase
     public function testAll()
     {
         $post = Post::forceCreate([
-            'title' => 'Post #1'
+            'title' => 'Post #1',
         ]);
 
         $category1 = Category::forceCreate([
@@ -169,7 +148,7 @@ class SyncableTraitTest extends TestCase
         $data['comments'] = [];
         $data['comments'][0] = $comment->toArray();
         $data['comments'][0]['author'] = ['id' => $author->id];
-        $data['comments'][1] = ['comment' => 'New Comment'];
+        $data['comments'][1] = ['comment' => 'New Comment', 'author' => $author->toArray()];
         $data['categories'] = [$category1->toArray(), $category2->toArray()];
 
         $post->saveAndSync($data, ['comments.author', 'author', 'categories']);
@@ -181,7 +160,7 @@ class SyncableTraitTest extends TestCase
         $this->assertEquals($post->id, 1);
 
         // Check Author
-        $this->assertEquals($post->author->id, 1);
+        $this->assertEquals($post->author->id, 2);
 
         // Check Comments
         $comments = $post->comments()->get();
@@ -201,17 +180,28 @@ class SyncableTraitTest extends TestCase
 
         $data = [
             'title' => 'Post #1',
+            'author' => ['id' => 1],
             'comments' => [[
-                'comment' => null
+                'id' => 123,
+                'comment' => 'jack'
+            ], [
+                'id' => 123,
+                'author' => null,
+                'comment' => 'jack'
+            ], [
+                'comment' => 'jack'
             ]]
         ];
 
         try {
-            $post->saveAndSync($data, ['comments']);
+            $post->saveAndSync($data, ['comments', 'author']);
             $this->fail("Expected exception not thrown");
         } catch (ValidationException $e) {
             $this->assertEquals(Post::count(), 0);
             $this->assertEquals(Comment::count(), 0);
+
+            // The last two comments should fail
+            $this->assertCount(2, $e->errors());
         }
     }
 
@@ -226,17 +216,18 @@ class SyncableTraitTest extends TestCase
         ]);
 
         $data = [
+            'title' => 'Jack',
             'notes' => 'This is a great post!',
             'comments' => [[
                 'id' => $comment->id,
-                'notes' => 'this is a note'
+                'comment' => 'this is a note',
+                'type' => 'public'
             ]]
         ];
 
         $post->saveAndSync($data);
 
         $this->assertEquals($post->notes, 'This is a great post!');
-        $this->assertEquals($post->comments[0]->notes, 'this is a note');
-
+        $this->assertEquals($post->comments[0]->comment, 'this is a note');
     }
 }

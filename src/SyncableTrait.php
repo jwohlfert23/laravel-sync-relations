@@ -14,7 +14,9 @@ use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Request;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
+use Illuminate\Validation\ValidationRuleParser;
 use Models\Comment;
 
 trait SyncableTrait
@@ -51,41 +53,6 @@ trait SyncableTrait
         return $this;
     }
 
-    protected function isRelationOneToMany(Relation $relation)
-    {
-        return is_a($relation, HasOneOrMany::class);
-    }
-
-    protected function isRelationSingle(Relation $relation)
-    {
-        return is_a($relation, HasOne::class) || is_a($relation, MorphOne::class);
-    }
-
-    protected function isRelationMany(Relation $relation)
-    {
-        return is_a($relation, HasMany::class) || is_a($relation, MorphMany::class);
-    }
-
-    /**
-     * @param Relation $relation
-     * @param $item
-     * @return Model|null|SyncableTrait
-     */
-    public function relatedExists(Relation $relation, $item)
-    {
-        $model = $relation->getRelated();
-        if (is_a($relation, MorphTo::class)) {
-            throw_if(empty($item['syncable_type']), new \InvalidArgumentException("Unable to determine morphed model class to sync"));
-            $class = Relation::getMorphedModel($item['syncable_type']) ?: $item['syncable_type'];
-            $model = new $class();
-        }
-        $primaryKey = $model->getKeyName();
-        if (!empty($item[$primaryKey])) {
-            return $model->find($item[$primaryKey]);
-        }
-        return null;
-    }
-
     public function syncRelationshipsFromTree(array $relationships, $data)
     {
         if (!is_iterable($relationships))
@@ -101,11 +68,11 @@ trait SyncableTrait
                 $relatedModel = $relationshipModel->getRelated();
                 $primaryKey = $relatedModel->getKeyName();
 
-                if ($this->isRelationOneToMany($relationshipModel)) {
+                if (SyncableHelpers::isRelationOneToMany($relationshipModel)) {
                     /** @var $relationshipModel HasOneOrMany */
 
                     // Handle hasOne relationships
-                    if ($this->isRelationSingle($relationshipModel)) {
+                    if (SyncableHelpers::isRelationSingle($relationshipModel)) {
                         $new = [$new];
                     }
                     $new = collect($new);
@@ -121,7 +88,7 @@ trait SyncableTrait
                             Arr::set($item, $orderProp, count($new) + 1 - $index);
                         }
 
-                        $related = $this->relatedExists($relationshipModel, $item);
+                        $related = SyncableHelpers::relatedExists($relationshipModel, $item);
                         if (!$related) {
                             $related = $relationshipModel->make();
                         }
@@ -157,69 +124,59 @@ trait SyncableTrait
         }
     }
 
-    public function getCompleteRules($relationships, $data)
+    public function getNestedRules($relationships)
     {
         $rules = $this->getSyncValidationRules();
-        if (!is_iterable($relationships)) {
-            return $rules;
-        }
-        foreach ($relationships as $relationship => $children) {
-            $relationshipModel = $this->{$relationship}();
-            $snake = Str::snake($relationship);
 
-            // Only validate HasOne or HasMany for now
-            if (!$this->isRelationOneToMany($relationshipModel)) {
-                continue;
-            }
+        if (is_iterable($relationships)) {
+            foreach ($relationships as $relationship => $children) {
+                $relationshipModel = $this->{$relationship}();
+                $snake = Str::snake($relationship);
+                $related = $relationshipModel->getRelated();
 
-            if (Arr::has($data, $snake)) {
-                $item = $data[$snake];
-                $key = $this->isRelationMany($relationshipModel) ? ($snake . '.*') : $snake;
-                $rules[$key] = $relationshipModel->getRelated()->getCompleteRules($children, is_array($item) ? Arr::first($item) : $item);
-            }
-        }
-
-        return Arr::dot($rules);
-    }
-
-    public function getCompleteData($relationships, $data)
-    {
-        $data = array_merge($this->toArray(), $data);
-        if (!is_iterable($relationships)) {
-            return $data;
-        }
-        foreach ($relationships as $relationship => $children) {
-            $relationshipModel = $this->{$relationship}();
-            $related = $relationshipModel->getRelated();
-            $primaryKey = $related->getKeyName();
-            $snake = Str::snake($relationship);
-
-            // Only validate HasOne or HasMany for now
-            if (!is_a($relationshipModel, HasOneOrMany::class)) {
-                continue;
-            }
-            if (Arr::has($data, $snake)) {
-                // Handle hasOne relationships
-                if ($this->isRelationSingle($relationshipModel)) {
-                    $item = $data[$snake];
-                    if (isset($item[$primaryKey])) {
-                        $data[$snake] = with(clone $relationshipModel)
-                            ->findOrFail($item[$primaryKey])
-                            ->getCompleteData($children, $item);
-                    }
-                } else {
-                    $data[$snake] = array_map(function ($item) use ($relationshipModel, $primaryKey, $children) {
-                        if (!isset($item[$primaryKey])) {
-                            return $item;
-                        }
-                        return with(clone $relationshipModel)
-                            ->findOrFail($item[$primaryKey])
-                            ->getCompleteData($children, $item);
-                    }, $data[$snake]);
+                if (SyncableHelpers::isRelationOneToMany($relationshipModel)) {
+                    $key = SyncableHelpers::isRelationMany($relationshipModel) ? ($snake . '.*') : $snake;
+                    $rules[$key] = $related->getNestedRules($children);
+                } else if (is_a($relationshipModel, BelongsTo::class)) {
+                    $pk = $related->getKeyName();
+                    $rules["$snake.$pk"] = Rule::exists($related->getTable(), $pk);
                 }
             }
+        }
 
 
+        return SyncableHelpers::dot($rules);
+    }
+
+    public function getCompleteRules($relationships, $data)
+    {
+        $rules = $this->getNestedRules($relationships);
+
+        // Change all subfields to be only required if they have a PK
+
+        return $rules;
+    }
+
+    public function getDataWithExists($relationships, $data, $exists = null)
+    {
+        $data['_exists'] = is_null($exists) ? !empty($data[$this->getKeyName()]) : $exists;
+
+        if (is_iterable($relationships)) {
+            foreach ($relationships as $relationship => $children) {
+                $relationshipModel = $this->{$relationship}();
+                $snake = Str::snake($relationship);
+                $related = $relationshipModel->getRelated();
+
+                if ($item = Arr::get($data, $snake)) {
+                    if (SyncableHelpers::isRelationSingle($relationshipModel)) {
+                        $data[$snake] = $related->getDataWithExists($children, $item);
+                    } else {
+                        $data[$snake] = array_map(function ($item) use ($related, $children) {
+                            return $related->getDataWithExists($children, $item);
+                        }, $data[$snake]);
+                    }
+                }
+            }
         }
         return $data;
     }
@@ -233,38 +190,28 @@ trait SyncableTrait
     protected function validateFromTree($relationships, $data)
     {
         $rules = $this->getCompleteRules($relationships, $data);
-        $data = $this->getCompleteData($relationships, $data);
-
+        $data = $this->getDataWithExists($relationships, $data, $this->exists);
         $validator = Validator::make($data, $rules, $this->getSyncValidationMessages());
         $validator->validate();
     }
 
-    public function parseRelationships($dot)
-    {
-        $arr = [];
-        $relations = is_string($dot) ? func_get_args() : $dot;
-        foreach ($relations as $relation) {
-            Arr::set($arr, $relation, true);
-        }
-        return $arr;
-    }
 
     public function syncRelationships($dotRelationship, $data)
     {
-        $tree = $this->parseRelationships($dotRelationship);
+        $tree = SyncableHelpers::parseRelationships($dotRelationship);
         $this->syncRelationshipsFromTree($tree, $data);
         return $this;
     }
 
     public function syncBelongsToFromDot($dotRelationship, $data)
     {
-        $tree = $this->parseRelationships($dotRelationship);
+        $tree = SyncableHelpers::parseRelationships($dotRelationship);
         return $this->syncBelongsTo($data, array_keys($tree));
     }
 
     public function validateForSync($dotRelationship, $data)
     {
-        $tree = $this->parseRelationships($dotRelationship);
+        $tree = SyncableHelpers::parseRelationships($dotRelationship);
         $this->validateFromTree($tree, $data);
         return $this;
     }
@@ -285,7 +232,7 @@ trait SyncableTrait
 
             if (is_a($relationshipModel, BelongsTo::class) && Arr::has($data, $snake)) {
                 /** @var $relationshipModel BelongsTo */
-                if ($parent = $this->relatedExists($relationshipModel, $data[$snake])) {
+                if ($parent = SyncableHelpers::relatedExists($relationshipModel, $data[$snake])) {
                     $relationshipModel->associate($parent);
                 } else {
                     $relationshipModel->dissociate();
@@ -304,10 +251,8 @@ trait SyncableTrait
      */
     public function saveAndSync($data, array $toSync = null)
     {
-        // If nothing provided here, use syncable property on model
-        if (is_null($toSync)) {
-            $toSync = $this->getSyncable();
-        }
+        // Default to syncable property on model
+        $toSync = is_null($toSync) ? $this->getSyncable() : $toSync;
 
         $this->validateForSync($toSync, $data);
 

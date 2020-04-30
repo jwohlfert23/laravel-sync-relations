@@ -1,14 +1,17 @@
 <?php namespace Models;
 
+use Illuminate\Validation\Rule;
+
 class Post extends BaseModel
 {
     protected $fillable = ['title', 'notes'];
-    protected $syncable = ['comments'];
+    protected $syncable = ['comments', 'author'];
 
     protected function getSyncValidationRules()
     {
         return [
-            'title' => 'required'
+            'title' => 'required',
+            'author' => 'required_exists',
         ];
     }
 
