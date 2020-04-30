@@ -124,7 +124,7 @@ trait SyncableTrait
         }
     }
 
-    public function getNestedRules($relationships)
+    public function getCompleteRules($relationships, $data)
     {
         $rules = $this->getSyncValidationRules();
 
@@ -134,27 +134,21 @@ trait SyncableTrait
                 $snake = Str::snake($relationship);
                 $related = $relationshipModel->getRelated();
 
-                if (SyncableHelpers::isRelationOneToMany($relationshipModel)) {
-                    $key = SyncableHelpers::isRelationMany($relationshipModel) ? ($snake . '.*') : $snake;
-                    $rules[$key] = $related->getNestedRules($children);
-                } else if (is_a($relationshipModel, BelongsTo::class)) {
-                    $pk = $related->getKeyName();
-                    $rules["$snake.$pk"] = Rule::exists($related->getTable(), $pk);
+                if (Arr::has($data, $snake)) {
+                    $item = $data[$snake];
+                    if (SyncableHelpers::isRelationOneToMany($relationshipModel)) {
+                        $key = SyncableHelpers::isRelationMany($relationshipModel) ? ($snake . '.*') : $snake;
+                        $rules[$key] = $related->getCompleteRules($children, is_array($item) ? Arr::first($item) : $item);
+                    } else if (is_a($relationshipModel, BelongsTo::class)) {
+                        $pk = $related->getKeyName();
+                        $rules["$snake.$pk"] = Rule::exists($related->getTable(), $pk);
+                    }
                 }
             }
         }
 
 
         return SyncableHelpers::dot($rules);
-    }
-
-    public function getCompleteRules($relationships, $data)
-    {
-        $rules = $this->getNestedRules($relationships);
-
-        // Change all subfields to be only required if they have a PK
-
-        return $rules;
     }
 
     public function getDataWithExists($relationships, $data, $exists = null)
