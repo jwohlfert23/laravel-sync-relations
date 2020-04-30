@@ -38,5 +38,12 @@
     "preferred-install": "dist"
   },
   "minimum-stability": "dev",
-  "prefer-stable": true
+  "prefer-stable": true,
+  "extra": {
+    "laravel": {
+      "providers": [
+        "Jwohlfert23\\LaravelSyncRelations\\SyncRelationsServiceProvider"
+      ]
+    }
+  }
 }
