@@ -8,19 +8,13 @@ use Illuminate\Validation\Rule;
 
 class SyncRelationsServiceProvider extends ServiceProvider
 {
-    protected function getLocalKey($attribute, $key)
-    {
-        $parts = explode('.', $attribute);
-        $parts[count($parts) - 1] = $key;
-        $existsKey = implode('.', $parts);
-        return $existsKey;
-    }
+
 
     public function boot()
     {
         Validator::extendImplicit('required_exists', function ($attribute, $value, $parameters, \Illuminate\Validation\Validator $validator) {
             $data = $validator->getData();
-            $existsKey = $this->getLocalKey($attribute, '_exists');
+            $existsKey = SyncableHelpers::getLocalKey($attribute, '_exists');
 
             // Is new model
             if (empty(Arr::get($data, $existsKey))) {
@@ -32,8 +26,8 @@ class SyncRelationsServiceProvider extends ServiceProvider
 
         Validator::extend('unique_exists', function ($attribute, $value, $parameters, \Illuminate\Validation\Validator $validator) {
             $data = $validator->getData();
-            $pk = Arr::get($data, $this->getLocalKey($attribute, '_pk'));
-            $pkName = Arr::get($data, $this->getLocalKey($attribute, '_pk_name'), 'id');
+            $pk = Arr::get($data, SyncableHelpers::getLocalKey($attribute, '_pk'));
+            $pkName = Arr::get($data, SyncableHelpers::getLocalKey($attribute, '_pk_name'), 'id');
 
             $newParams = array_slice($parameters, 0, 2);
             if (!empty($pk)) {

@@ -124,7 +124,7 @@ trait SyncableTrait
         }
     }
 
-    public function getCompleteRules($relationships, $data)
+    public function getSyncableRules($relationships, $data)
     {
         $rules = $this->getSyncValidationRules();
 
@@ -138,7 +138,7 @@ trait SyncableTrait
                     $item = $data[$snake];
                     if (SyncableHelpers::isRelationOneToMany($relationshipModel)) {
                         $key = SyncableHelpers::isRelationMany($relationshipModel) ? ($snake . '.*') : $snake;
-                        $rules[$key] = $related->getCompleteRules($children, is_array($item) ? Arr::first($item) : $item);
+                        $rules[$key] = $related->getSyncableRules($children, is_array($item) ? Arr::first($item) : $item);
                     } else if (is_a($relationshipModel, BelongsTo::class)) {
                         $pk = $related->getKeyName();
                         $rules["$snake.$pk"] = Rule::exists($related->getTable(), $pk);
@@ -175,6 +175,12 @@ trait SyncableTrait
             }
         }
         return $data;
+    }
+
+    public function getCompleteRules($relationships, $data)
+    {
+        $flat = $this->getSyncableRules($relationships, $data);
+        return SyncableHelpers::makeRulesRelative($flat);
     }
 
     /**

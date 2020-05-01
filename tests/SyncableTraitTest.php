@@ -9,6 +9,7 @@ use Models\Author;
 use Models\Category;
 use Models\Comment;
 use Models\Post;
+use Models\Table;
 use Orchestra\Testbench\TestCase;
 
 class SyncableTraitTest extends TestCase
@@ -61,7 +62,6 @@ class SyncableTraitTest extends TestCase
 
         Author::create(['name' => 'Jack']);
     }
-
 
     public function testInvalid()
     {
@@ -247,5 +247,36 @@ class SyncableTraitTest extends TestCase
         } catch (ValidationException $e) {
             $this->assertCount(1, $e->errors());
         }
+    }
+
+    public function testMultilevel()
+    {
+        $post = new Post();
+
+        $rules = $post->getCompleteRules(SyncableHelpers::parseRelationships(['comments.childComments']), [
+            'comments' => [[
+                'comment' => 'this is a comment',
+                'child_comments' => [[
+                    'comment' => 'this is a child comment'
+                ]]
+            ]]
+        ]);
+
+        $this->assertTrue(isset($rules['comments.*.child_comments.*.type']));
+    }
+
+    public function testMultilevelLocalKey()
+    {
+        $table = new Table();
+
+        $rules = $table->getCompleteRules(SyncableHelpers::parseRelationships('rows.cells'), [
+            'rows' => [[
+                'cells' => [[
+                    'content' => ''
+                ]]
+            ]]
+        ]);
+
+        $this->assertEquals($rules['rows.*.cells.*.content'], 'required_without:rows.*.cells.*.text');
     }
 }

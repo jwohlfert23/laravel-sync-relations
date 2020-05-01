@@ -49,11 +49,45 @@ class SyncableHelpers
         return null;
     }
 
+    public static function getLocalKey($attribute, $key)
+    {
+        $parts = explode('.', $attribute);
+        $parts[count($parts) - 1] = $key;
+        $existsKey = implode('.', $parts);
+        return $existsKey;
+    }
+
+    protected static function makeRelative($string, $key)
+    {
+        if (!is_string($string)) {
+            return $string;
+        }
+
+        return preg_replace_callback('/{(.*?)}/', function ($matches) use ($key) {
+            return static::getLocalKey($key, $matches[1]);
+        }, $string);
+    }
+
+    public static function makeRulesRelative($flat)
+    {
+        foreach ($flat as $column => $value) {
+            if (is_array($value)) {
+                $flat[$column] = array_map(function ($rule) use ($column) {
+                    return static::makeRelative($rule, $column);
+                }, $value);
+            }
+            $flat[$column] = static::makeRelative($value, $column);
+        }
+
+        return $flat;
+    }
+
     public static function dot($array, $prepend = '')
     {
         $results = [];
 
         foreach ($array as $key => $value) {
+            // Test for assoc array (object in JS terms)
             if (is_array($value) && !empty($value) && array_keys($value)[0] !== 0) {
                 $results = array_merge($results, static::dot($value, $prepend . $key . '.'));
             } else {
