@@ -245,7 +245,6 @@ class SyncableTraitTest extends TestCase
             ]);
             $this->fail("Expected exception not thrown");
         } catch (ValidationException $e) {
-            dd($e->errors());
             $this->assertCount(1, $e->errors());
         }
     }
