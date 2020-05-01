@@ -154,6 +154,8 @@ trait SyncableTrait
     public function getDataWithExists($relationships, $data, $exists = null)
     {
         $data['_exists'] = is_null($exists) ? !empty($data[$this->getKeyName()]) : $exists;
+        $data['_pk'] = is_null($exists) ? Arr::get($data, $this->getKeyName()) : $this->getKey();
+        $data['_pk_name'] = $this->getKeyName();
 
         if (is_iterable($relationships)) {
             foreach ($relationships as $relationship => $children) {

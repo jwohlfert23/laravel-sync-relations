@@ -10,7 +10,7 @@ class Post extends BaseModel
     protected function getSyncValidationRules()
     {
         return [
-            'title' => 'required',
+            'title' => 'required|unique_exists:posts,title',
             'author' => 'required_exists',
         ];
     }

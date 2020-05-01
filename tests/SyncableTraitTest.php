@@ -230,4 +230,23 @@ class SyncableTraitTest extends TestCase
         $this->assertEquals($post->notes, 'This is a great post!');
         $this->assertEquals($post->comments[0]->comment, 'this is a note');
     }
+
+    public function testUnique()
+    {
+        $post = Post::create(['title' => 'Unique Post']);
+
+        $post->saveAndSync(['title' => 'Unique Post']);
+
+        try {
+            $newPost = new Post();
+            $newPost->saveAndSync([
+                'title' => 'Unique Post',
+                'author' => ['id' => 1]
+            ]);
+            $this->fail("Expected exception not thrown");
+        } catch (ValidationException $e) {
+            dd($e->errors());
+            $this->assertCount(1, $e->errors());
+        }
+    }
 }
