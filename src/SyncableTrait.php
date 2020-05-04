@@ -139,7 +139,7 @@ trait SyncableTrait
                     if (SyncableHelpers::isRelationOneToMany($relationshipModel)) {
                         $key = SyncableHelpers::isRelationMany($relationshipModel) ? ($snake . '.*') : $snake;
                         $rules[$key] = $related->getSyncableRules($children, is_array($item) ? Arr::first($item) : $item);
-                    } else if (is_a($relationshipModel, BelongsTo::class)) {
+                    } else if (get_class($relationshipModel) === BelongsTo::class) {
                         $pk = $related->getKeyName();
                         $rules["$snake.$pk"] = Rule::exists($related->getTable(), $pk);
                     }
