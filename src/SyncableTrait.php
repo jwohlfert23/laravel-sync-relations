@@ -19,6 +19,7 @@ use Illuminate\Validation\ValidationException;
 use Illuminate\Validation\ValidationRuleParser;
 use Models\Comment;
 
+/** @mixin Model */
 trait SyncableTrait
 {
     protected $syncable = [];
@@ -258,6 +259,10 @@ trait SyncableTrait
 
         $this->validateForSync($toSync, $data);
 
+        if ($this->fireModelEvent('syncing') === false) {
+            return false;
+        }
+
         $data = $this->beforeSync($data);
 
         $this->fill($data)
@@ -265,6 +270,8 @@ trait SyncableTrait
             ->save();
 
         $this->syncRelationships($toSync, $data);
+
+        $this->fireModelEvent('synced');
 
         return $this->afterSync($data);
     }
@@ -278,5 +285,6 @@ trait SyncableTrait
     protected function initializeSyncableTrait()
     {
         $this->appends[] = 'syncable_type';
+        $this->addObservableEvents(['syncing', 'synced']);
     }
 }
