@@ -39,6 +39,16 @@ trait SyncableTrait
         return [];
     }
 
+    public static function syncing($callback)
+    {
+        static::registerModelEvent('syncing', $callback);
+    }
+
+    public static function synced($callback)
+    {
+        static::registerModelEvent('synced', $callback);
+    }
+
     protected function getOrderAttributeName()
     {
         return null;
@@ -52,6 +62,19 @@ trait SyncableTrait
     public function afterSync($data)
     {
         return $this;
+    }
+
+    public function finishSave(array $options)
+    {
+        $this->fireModelEvent('saved', false);
+
+        if ($this->isDirty() && ($options['touch'] ?? true)) {
+            $this->touchOwners();
+        }
+
+        if (empty($options['skip_sync_original'])) {
+            $this->syncOriginal();
+        }
     }
 
     public function syncRelationshipsFromTree(array $relationships, $data)
@@ -267,11 +290,12 @@ trait SyncableTrait
 
         $this->fill($data)
             ->syncBelongsToFromDot($toSync, $data)
-            ->save();
+            ->save(['skip_sync_original' => true]);
 
         $this->syncRelationships($toSync, $data);
 
         $this->fireModelEvent('synced');
+        $this->syncOriginal();
 
         return $this->afterSync($data);
     }
