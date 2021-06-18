@@ -137,7 +137,17 @@ trait SyncableTrait
                 } else if (is_a($relationshipModel, BelongsToMany::class)) {
                     /** @var $relationshipModel BelongsToMany */
 
-                    $ids = collect($new)->pluck($primaryKey)->filter()->values()->toArray();
+                    $ids = collect($new)->whereNotNull($primaryKey)->mapWithKeys(function ($item) use ($primaryKey, $relationshipModel) {
+                        $key = Arr::get($item, $primaryKey);
+                        // Get pivot data without the keys in the pivot table (just the extra pivot data)
+                        $pivot = Arr::except(Arr::get($item, 'pivot', []), [
+                            $relationshipModel->getForeignPivotKeyName(),
+                            $relationshipModel->getRelatedPivotKeyName(),
+                            'created_at',
+                            'updated_at'
+                        ]);
+                        return [$key => $pivot];
+                    })->all();
                     $relationshipModel->sync($ids);
                 }
 
