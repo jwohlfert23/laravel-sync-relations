@@ -231,7 +231,6 @@ trait SyncableTrait
         $validator->validate();
     }
 
-
     public function syncRelationships($dotRelationship, $data)
     {
         $tree = SyncableHelpers::parseRelationships($dotRelationship);

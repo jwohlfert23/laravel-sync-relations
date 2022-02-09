@@ -8,8 +8,6 @@ use Illuminate\Validation\Rule;
 
 class SyncRelationsServiceProvider extends ServiceProvider
 {
-
-
     public function boot()
     {
         Validator::extendImplicit('required_exists', function ($attribute, $value, $parameters, \Illuminate\Validation\Validator $validator) {
