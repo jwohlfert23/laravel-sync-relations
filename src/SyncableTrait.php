@@ -309,15 +309,8 @@ trait SyncableTrait
         return $this->afterSync($data);
     }
 
-    public function getSyncableTypeAttribute()
-    {
-        $alias = array_search(static::class, Relation::$morphMap);
-        return $alias === false ? static::class : $alias;
-    }
-
     protected function initializeSyncableTrait()
     {
-        $this->appends[] = 'syncable_type';
         $this->addObservableEvents(['syncing', 'synced']);
     }
 }

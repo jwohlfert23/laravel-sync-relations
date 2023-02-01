@@ -38,9 +38,7 @@ class SyncableHelpers
     {
         $model = $relation->getRelated();
         if (is_a($relation, MorphTo::class)) {
-            throw_if(empty($item['syncable_type']), new \InvalidArgumentException("Unable to determine morphed model class to sync"));
-            $class = Relation::getMorphedModel($item['syncable_type']) ?: $item['syncable_type'];
-            $model = new $class();
+            throw new \Exception("MorphTo relations are not supported");
         }
         $primaryKey = $model->getKeyName();
         if (!empty($item[$primaryKey])) {
